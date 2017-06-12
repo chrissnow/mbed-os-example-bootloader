@@ -104,7 +104,9 @@ int main()
 
     drive.init();
 
-    fs.mount(&drive);
+    error =fs.mount(&drive);
+	if(error==FR_OK)
+	{
 	
     FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
     if (file != NULL) {
@@ -120,6 +122,8 @@ int main()
 
     fs.unmount();
     drive.deinit();
+
+	}
 
     printf("Starting application\r\n");
 
