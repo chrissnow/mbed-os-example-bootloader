@@ -1,111 +1,18 @@
 #include "mbed.h"
-
-
-#include "FATFileSystem.h"
-#include <errno.h>
-
-
-#define SD
-
-#ifdef SD
 #include "SDBlockDevice.h"
+#include "FATFileSystem.h"
 
-SDBlockDevice drive(PB_15, PB_14, PB_13, PB_12);
-DigitalOut sdpower(PB_2,1);
-#endif
-
-#ifdef DF
-#include "DataFlashDevice.h"
-
-DataFlashDevice drive(PB_15, PB_14, PB_13, PB_12, PB_2, 1000000);
-#endif
-FATFileSystem fs("disk");
-
+SDBlockDevice sd(D11, D12, D13, D10);
+FATFileSystem fs("sd");
 FlashIAP flash;
-void return_error(int ret_val) {
-	if (ret_val)
-		printf("Failure. %d\n", ret_val);
-	else
-		printf("done.\n");
-}
 
-void errno_error(void* ret_val) {
-	if (ret_val == NULL)
-		printf(" Failure. %d \n", errno);
-	else
-		printf(" done.\n");
-}
 void apply_update(FILE *file, uint32_t address);
-bool FSTest() {
-	int error = 0;
-	printf("Opening root directory.");
-	DIR* dir = opendir("/disk/");
 
-	struct dirent* de;
-	printf("Printing all filenames:\r\n");
-	while ((de = readdir(dir)) != NULL) {
-		printf("  %s\r\n", &(de->d_name)[0]);
-	}
-
-	printf("Closeing root directory. ");
-	error = closedir(dir);
-	return_error(error);
-	printf("Filesystem Demo complete.\r\n");
-
-	printf("Opening a new file, numbers.txt.");
-	FILE* fd = fopen("/disk/numbers.txt", "w+");
-	errno_error(fd);
-
-	for (int i = 0; i < 20; i++) {
-		printf("Writing decimal numbers to a file (%d/20)\r\n", i);
-		fprintf(fd, "%d\r\n", i);
-	}
-	printf("Writing decimal numbers to a file (20/20) done.\r\n");
-
-	printf("Closing file.");
-	fclose(fd);
-	printf(" done.\r\n");
-
-	printf("Re-opening file read-only.");
-	fd = fopen("/disk/numbers.txt", "r");
-	errno_error(fd);
-
-	printf("Dumping file to screen.\r\n");
-	char buff[16] = { 0 };
-	while (!feof(fd)) {
-		int size = fread(&buff[0], 1, 15, fd);
-		fwrite(&buff[0], 1, size, stdout);
-	}
-	printf("EOF.\r\n");
-
-	printf("Closing file.");
-	fclose(fd);
-	printf(" done.\r\n");
-
-	printf("Opening root directory.");
-	dir = opendir("/disk/");
-	errno_error(fd);
-
-	printf("Printing all filenames:\r\n");
-	while ((de = readdir(dir)) != NULL) {
-		printf("  %s\r\n", &(de->d_name)[0]);
-	}
-
-	printf("Closing root directory. ");
-	error = closedir(dir);
-	return_error(error);
-	printf("Filesystem Demo complete.\r\n");
-}
 int main()
 {
-		printf("begin.\r\n");
+    sd.init();
+    fs.mount(&sd);
 
-		int error = 0;
-
-    drive.init();
-
-    fs.mount(&drive);
-	
     FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
     if (file != NULL) {
         printf("Firmware update found\r\n");
@@ -119,7 +26,7 @@ int main()
     }
 
     fs.unmount();
-    drive.deinit();
+    sd.deinit();
 
     printf("Starting application\r\n");
 
