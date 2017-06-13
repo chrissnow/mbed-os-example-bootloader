@@ -5,13 +5,13 @@
 #include <errno.h>
 
 
-#define SD
+#define DF
 
 #ifdef SD
 #include "SDBlockDevice.h"
+DigitalOut sdpower(PB_2,1);
 
 SDBlockDevice drive(PB_15, PB_14, PB_13, PB_12);
-DigitalOut sdpower(PB_2,1);
 #endif
 
 #ifdef DF
@@ -22,6 +22,9 @@ DataFlashDevice drive(PB_15, PB_14, PB_13, PB_12, PB_2, 1000000);
 FATFileSystem fs("disk");
 
 FlashIAP flash;
+
+
+
 void return_error(int ret_val) {
 	if (ret_val)
 		printf("Failure. %d\n", ret_val);
@@ -108,6 +111,7 @@ int main()
 	if(error==FR_OK)
 	{
 	
+		FSTest();
     FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
     if (file != NULL) {
         printf("Firmware update found\r\n");
