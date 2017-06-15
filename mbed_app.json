@@ -14,6 +14,6 @@
         }
     },
     "config": {
-        "update_file": "\"/disk/xdot_ota.bin\""
+        "update_file": "\"/disk/app.bin\""
     }
 }

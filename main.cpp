@@ -1,15 +1,13 @@
 #include "mbed.h"
 
-
 #include "FATFileSystem.h"
 #include <errno.h>
+#include "stm32l1xx_hal_flash.h"
 
-
-#define DF
+#define SD
 
 #ifdef SD
 #include "SDBlockDevice.h"
-DigitalOut sdpower(PB_2,1);
 
 SDBlockDevice drive(PB_15, PB_14, PB_13, PB_12);
 #endif
@@ -22,8 +20,6 @@ DataFlashDevice drive(PB_15, PB_14, PB_13, PB_12, PB_2, 1000000);
 FATFileSystem fs("disk");
 
 FlashIAP flash;
-
-
 
 void return_error(int ret_val) {
 	if (ret_val)
@@ -99,42 +95,102 @@ bool FSTest() {
 	return_error(error);
 	printf("Filesystem Demo complete.\r\n");
 }
-int main()
-{
-		printf("begin.\r\n");
 
-		int error = 0;
+int erase_flash(uint32_t start, uint32_t end) {
+	uint32_t PAGEError;
+	FLASH_EraseInitTypeDef EraseInitStruct;
+	EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
+	EraseInitStruct.PageAddress = start;
+	EraseInitStruct.NbPages = (end - start) / FLASH_PAGE_SIZE;
+	printf("erase %x\r\n", start);
 
-    drive.init();
+	HAL_FLASH_Unlock();
+	__HAL_FLASH_CLEAR_FLAG(
+			FLASH_FLAG_EOP | FLASH_FLAG_PGAERR | FLASH_FLAG_WRPERR);
 
-    error =fs.mount(&drive);
-	if(error==FR_OK)
-	{
-	
-		FSTest();
-    FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
-    if (file != NULL) {
-        printf("Firmware update found\r\n");
-
-        apply_update(file, POST_APPLICATION_ADDR);
-
-        fclose(file);
-        remove(MBED_CONF_APP_UPDATE_FILE);
-    } else {
-        printf("No update found to apply\r\n");
-    }
-
-    fs.unmount();
-    drive.deinit();
-
+	if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) == HAL_OK) {
+		HAL_FLASH_Lock();
+	} else {
+		printf("erase failed at %x\r\n", PAGEError);
+		return -1;
 	}
+	return 0;
+}
+int program_flash(uint32_t start, uint32_t end, char* data) {
+	char* ptr = data;
+	uint32_t addr = start;
+	while (addr < end) {
+		HAL_FLASH_Unlock();
+		//printf("program %x\r\n",addr);
 
-    printf("Starting application\r\n");
+		if (HAL_FLASH_Program(TYPEPROGRAM_WORD, addr, *(uint32_t*) ptr)
+				== HAL_OK) {
+			HAL_FLASH_Lock();
+		} else {
+			printf("program failed at %x\r\n", addr);
 
-    mbed_start_application(POST_APPLICATION_ADDR);
+			return -1;
+		}
+		addr += 4;
+		ptr += 4;
+	}
+	return 0;
 }
 
-void apply_update(FILE *file, uint32_t address)
+int main() {
+	wait_ms(100);
+	printf("begin.\r\n");
+
+	int error = 0;
+
+	if (drive.init() == 0) {
+
+		error = fs.mount(&drive);
+		if (error == FR_OK) {
+
+			//FSTest();
+			FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
+			if (file != NULL) {
+				printf("Firmware update found\r\n");
+
+				apply_update(file, POST_APPLICATION_ADDR);
+
+				rewind(file);
+				uint32_t page_size = FLASH_PAGE_SIZE;
+				uint32_t buffer;
+				uint32_t *ptr;
+				ptr = (uint32_t*) POST_APPLICATION_ADDR;
+				while (true) {
+
+					// Read data for this page
+					int size_read = fread(&buffer, 1, 4, file);
+					if (size_read <= 0) {
+						break;
+					}
+					if (buffer != *ptr) {
+						printf("verify failed at %x, should be %x read %x\r\n",
+								ptr, buffer, *ptr);
+
+					}
+					ptr++;
+				}
+
+				fclose(file);
+				remove (MBED_CONF_APP_UPDATE_FILE);
+			} else {
+				printf("No update found to apply\r\n");
+			}
+
+			fs.unmount();
+			drive.deinit();
+
+		}
+	}
+	printf("Starting application\r\n");
+
+	mbed_start_application (POST_APPLICATION_ADDR);
+}
+void apply_update2(FILE *file, uint32_t address)
 {
     flash.init();
 
@@ -171,4 +227,27 @@ void apply_update(FILE *file, uint32_t address)
     delete[] page_buffer;
 
     flash.deinit();
+}
+void apply_update(FILE *file, uint32_t address) {
+	uint32_t page_size = FLASH_PAGE_SIZE;
+	char page_buffer[FLASH_PAGE_SIZE];
+	uint32_t addr = address;
+	while (true) {
+
+		// Read data for this page
+		memset(page_buffer, 0, page_size);
+		int size_read = fread(page_buffer, 1, page_size, file);
+		if (size_read <= 0) {
+			break;
+		}
+
+		erase_flash(addr, addr + page_size);
+
+		program_flash(addr, addr + page_size, page_buffer);
+		addr += page_size;
+
+	}
+
+	delete[] page_buffer;
+
 }
