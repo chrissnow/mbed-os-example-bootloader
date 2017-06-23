@@ -10,10 +10,15 @@
             "target.restrict_size": "0x40000"
         },
         "XDOT_L151CC": {
-            "target.restrict_size": "0x10000"
+            "target.restrict_size": "0x9000"
+        },
+		"*": {
+            "platform.stdio-flush-at-exit": false
         }
     },
     "config": {
         "update_file": "\"/disk/app.bin\""
-    }
+    }, "macros": [ 
+        "NDEBUG=1"
+    ]
 }

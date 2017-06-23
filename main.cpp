@@ -10,33 +10,49 @@
 #include "SDBlockDevice.h"
 
 SDBlockDevice drive(PB_15, PB_14, PB_13, PB_12);
+//SDBlockDevice drive(MBED_CONF_SD_SPI_MOSI, MBED_CONF_SD_SPI_MISO, MBED_CONF_SD_SPI_CLK, MBED_CONF_SD_SPI_CS);
+//
 #endif
 
 #ifdef DF
 #include "DataFlashDevice.h"
 
 DataFlashDevice drive(PB_15, PB_14, PB_13, PB_12, PB_2, 1000000);
+//DataFlashDevice drive(MBED_CONF_SD_SPI_MOSI, MBED_CONF_SD_SPI_MISO, MBED_CONF_SD_SPI_CLK, MBED_CONF_SD_SPI_CS, PB_2, 1000000);
+
 #endif
 FATFileSystem fs("disk");
 
 FlashIAP flash;
 
 void return_error(int ret_val) {
-	if (ret_val)
+	if (ret_val) {
+#ifndef NDEBUG
 		printf("Failure. %d\n", ret_val);
-	else
+#endif
+	} else {
+#ifndef NDEBUG
 		printf("done.\n");
+#endif
+	}
 }
 
 void errno_error(void* ret_val) {
-	if (ret_val == NULL)
+	if (ret_val == NULL) {
+#ifndef NDEBUG
 		printf(" Failure. %d \n", errno);
-	else
+#endif
+	} else {
+#ifndef NDEBUG
 		printf(" done.\n");
+#endif
+	}
 }
 void apply_update(FILE *file, uint32_t address);
+#ifdef fstest
 bool FSTest() {
 	int error = 0;
+
 	printf("Opening root directory.");
 	DIR* dir = opendir("/disk/");
 
@@ -70,7 +86,7 @@ bool FSTest() {
 	errno_error(fd);
 
 	printf("Dumping file to screen.\r\n");
-	char buff[16] = { 0 };
+	char buff[16] = {0};
 	while (!feof(fd)) {
 		int size = fread(&buff[0], 1, 15, fd);
 		fwrite(&buff[0], 1, size, stdout);
@@ -95,14 +111,14 @@ bool FSTest() {
 	return_error(error);
 	printf("Filesystem Demo complete.\r\n");
 }
-
+#endif
 int erase_flash(uint32_t start, uint32_t end) {
 	uint32_t PAGEError;
 	FLASH_EraseInitTypeDef EraseInitStruct;
 	EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
 	EraseInitStruct.PageAddress = start;
 	EraseInitStruct.NbPages = (end - start) / FLASH_PAGE_SIZE;
-	printf("erase %x\r\n", start);
+	//printf("erase %x\r\n", start);
 
 	HAL_FLASH_Unlock();
 	__HAL_FLASH_CLEAR_FLAG(
@@ -111,7 +127,9 @@ int erase_flash(uint32_t start, uint32_t end) {
 	if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) == HAL_OK) {
 		HAL_FLASH_Lock();
 	} else {
+#ifndef NDEBUG
 		printf("erase failed at %x\r\n", PAGEError);
+#endif
 		return -1;
 	}
 	return 0;
@@ -121,14 +139,16 @@ int program_flash(uint32_t start, uint32_t end, char* data) {
 	uint32_t addr = start;
 	while (addr < end) {
 		HAL_FLASH_Unlock();
-		//printf("program %x\r\n",addr);
-
+#ifndef NDEBUG
+		printf("program %x\r\n",addr);
+#endif
 		if (HAL_FLASH_Program(TYPEPROGRAM_WORD, addr, *(uint32_t*) ptr)
 				== HAL_OK) {
 			HAL_FLASH_Lock();
 		} else {
+#ifndef NDEBUG
 			printf("program failed at %x\r\n", addr);
-
+#endif
 			return -1;
 		}
 		addr += 4;
@@ -139,8 +159,9 @@ int program_flash(uint32_t start, uint32_t end, char* data) {
 
 int main() {
 	wait_ms(100);
+#ifndef NDEBUG
 	printf("begin.\r\n");
-
+#endif
 	int error = 0;
 
 	if (drive.init() == 0) {
@@ -151,12 +172,13 @@ int main() {
 			//FSTest();
 			FILE *file = fopen(MBED_CONF_APP_UPDATE_FILE, "rb");
 			if (file != NULL) {
+#ifndef NDEBUG
 				printf("Firmware update found\r\n");
+#endif
 
 				apply_update(file, POST_APPLICATION_ADDR);
 
 				rewind(file);
-				uint32_t page_size = FLASH_PAGE_SIZE;
 				uint32_t buffer;
 				uint32_t *ptr;
 				ptr = (uint32_t*) POST_APPLICATION_ADDR;
@@ -168,9 +190,9 @@ int main() {
 						break;
 					}
 					if (buffer != *ptr) {
-						printf("verify failed at %x, should be %x read %x\r\n",
-								ptr, buffer, *ptr);
-
+#ifndef NDEBUG
+						printf("verify failed at %x, should be %x read %x\r\n",ptr, buffer, *ptr);
+#endif
 					}
 					ptr++;
 				}
@@ -178,7 +200,9 @@ int main() {
 				fclose(file);
 				remove (MBED_CONF_APP_UPDATE_FILE);
 			} else {
+#ifndef NDEBUG
 				printf("No update found to apply\r\n");
+#endif
 			}
 
 			fs.unmount();
@@ -186,47 +210,47 @@ int main() {
 
 		}
 	}
+#ifndef NDEBUG
 	printf("Starting application\r\n");
-
+#endif
 	mbed_start_application (POST_APPLICATION_ADDR);
 }
-void apply_update2(FILE *file, uint32_t address)
-{
-    flash.init();
+void apply_update2(FILE *file, uint32_t address) {
+	flash.init();
 
-    const uint32_t page_size = flash.get_page_size();
-    char *page_buffer = new char[page_size];
-    uint32_t addr = address;
-    uint32_t next_sector = addr + flash.get_sector_size(addr);
-    bool sector_erased = false;
-    while (true) {
+	const uint32_t page_size = flash.get_page_size();
+	char *page_buffer = new char[page_size];
+	uint32_t addr = address;
+	uint32_t next_sector = addr + flash.get_sector_size(addr);
+	bool sector_erased = false;
+	while (true) {
 
-        // Read data for this page
-        memset(page_buffer, 0, sizeof(page_buffer));
-        int size_read = fread(page_buffer, 1, page_size, file);
-        if (size_read <= 0) {
-            break;
-        }
+		// Read data for this page
+		memset(page_buffer, 0, sizeof(page_buffer));
+		int size_read = fread(page_buffer, 1, page_size, file);
+		if (size_read <= 0) {
+			break;
+		}
 
-        // Erase this page if it hasn't been erased
-        if (!sector_erased) {
-            flash.erase(addr, flash.get_sector_size(addr));
-            sector_erased = true;
-        }
+		// Erase this page if it hasn't been erased
+		if (!sector_erased) {
+			flash.erase(addr, flash.get_sector_size(addr));
+			sector_erased = true;
+		}
 
-        // Program page
-        flash.program(page_buffer, addr, page_size);
+		// Program page
+		flash.program(page_buffer, addr, page_size);
 
-        addr += page_size;
-        if (addr >= next_sector) {
-            next_sector = addr + flash.get_sector_size(addr);
-            sector_erased = false;
+		addr += page_size;
+		if (addr >= next_sector) {
+			next_sector = addr + flash.get_sector_size(addr);
+			sector_erased = false;
 
-        }
-    }
-    delete[] page_buffer;
+		}
+	}
+	delete[] page_buffer;
 
-    flash.deinit();
+	flash.deinit();
 }
 void apply_update(FILE *file, uint32_t address) {
 	uint32_t page_size = FLASH_PAGE_SIZE;
